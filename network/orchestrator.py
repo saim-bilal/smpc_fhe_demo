@@ -82,13 +82,31 @@ def secure_add_networked(x, y, num_parties, base_port):
     x_shares = share_secret(x, num_parties)
     y_shares = share_secret(y, num_parties)
 
+    print(f"\n{'─' * 55}")
+    print(f"  SECURE ADDITION  —  x = {x},  y = {y}")
+    print(f"{'─' * 55}")
+
+    print("\n  ▸ Secret-sharing inputs …")
+    for i in range(num_parties):
+        print(f"    [Node {i}]  x_share = {x_shares[i]}")
+        print(f"             y_share = {y_shares[i]}")
+
     _send_to_all(num_parties, base_port, lambda i: {
         "cmd": "SET_SHARES",
         "x_share": x_shares[i], "y_share": y_shares[i],
     })
 
     resps = _collect(num_parties, base_port, {"cmd": "ADD_SHARES"})
-    return reconstruct([int(r["s_share"]) for r in resps])
+    s_shares = [int(r["s_share"]) for r in resps]
+
+    print("\n  ▸ Each node computes  s_i = x_i + y_i  (mod p) …")
+    for i, s in enumerate(s_shares):
+        print(f"    [Node {i}]  s_share = {s}")
+
+    result = reconstruct(s_shares)
+    print(f"\n  ▸ Reconstruct sum from shares → {result}")
+    print(f"{'─' * 55}")
+    return result
 
 
 # ── secure addition (matrix) ─────────────────────────────────────────────
@@ -108,7 +126,17 @@ def secure_multiply_networked(x, y, num_parties, base_port, use_fhe=False):
     x_shares = share_secret(x, num_parties)
     y_shares = share_secret(y, num_parties)
 
+    print(f"\n{'─' * 55}")
+    print(f"  SECURE MULTIPLICATION  —  x = {x},  y = {y}")
+    print(f"  Triple source: {'FHE (BFV)' if use_fhe else 'Trusted dealer'}")
+    print(f"{'─' * 55}")
+
     # 1. distribute input shares
+    print("\n  ▸ Step 1 — Secret-sharing inputs …")
+    for i in range(num_parties):
+        print(f"    [Node {i}]  x_share = {x_shares[i]}")
+        print(f"             y_share = {y_shares[i]}")
+
     _send_to_all(num_parties, base_port, lambda i: {
         "cmd": "SET_SHARES",
         "x_share": x_shares[i], "y_share": y_shares[i],
@@ -116,6 +144,13 @@ def secure_multiply_networked(x, y, num_parties, base_port, use_fhe=False):
 
     # 2. generate & distribute Beaver triple
     a_sh, b_sh, c_sh = _make_triple(num_parties, use_fhe)
+
+    print("\n  ▸ Step 2 — Distributing Beaver triple (a, b, c) …")
+    for i in range(num_parties):
+        print(f"    [Node {i}]  a = {a_sh[i]}")
+        print(f"             b = {b_sh[i]}")
+        print(f"             c = {c_sh[i]}")
+
     _send_to_all(num_parties, base_port, lambda i: {
         "cmd": "RECEIVE_TRIPLE",
         "a_share": a_sh[i], "b_share": b_sh[i], "c_share": c_sh[i],
@@ -123,12 +158,31 @@ def secure_multiply_networked(x, y, num_parties, base_port, use_fhe=False):
 
     # 3. collect masked differences
     resps = _collect(num_parties, base_port, {"cmd": "COMPUTE_D_E"})
-    d = sum(int(r["d_share"]) for r in resps) % FIELD_PRIME
-    e = sum(int(r["e_share"]) for r in resps) % FIELD_PRIME
+    d_shares = [int(r["d_share"]) for r in resps]
+    e_shares = [int(r["e_share"]) for r in resps]
+
+    print("\n  ▸ Step 3 — Masked differences  d_i = x_i − a_i,  e_i = y_i − b_i …")
+    for i in range(num_parties):
+        print(f"    [Node {i}]  d_share = {d_shares[i]}")
+        print(f"             e_share = {e_shares[i]}")
+
+    d = sum(d_shares) % FIELD_PRIME
+    e = sum(e_shares) % FIELD_PRIME
+    print(f"\n    Reconstructed  d = {d}")
+    print(f"    Reconstructed  e = {e}")
 
     # 4. compute output shares
     resps = _collect(num_parties, base_port, {"cmd": "COMPUTE_Z", "d": d, "e": e})
-    return reconstruct([int(r["z_share"]) for r in resps])
+    z_shares = [int(r["z_share"]) for r in resps]
+
+    print("\n  ▸ Step 4 — Output shares  z_i = c_i + d·b_i + e·a_i  (+d·e for node 0) …")
+    for i, z in enumerate(z_shares):
+        print(f"    [Node {i}]  z_share = {z}")
+
+    result = reconstruct(z_shares)
+    print(f"\n  ▸ Reconstruct product from shares → {result}")
+    print(f"{'─' * 55}")
+    return result
 
 
 # ── multiply with a pre-supplied triple ───────────────────────────────────

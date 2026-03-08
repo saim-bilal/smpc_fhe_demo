@@ -11,13 +11,13 @@ This project implements advanced cryptographic protocols that allow multiple par
 
 | Technique | One-Liner | Project Role |
 | :--- | :--- | :--- |
-| **SMPC** (Secure Multi-Party Computation) | Multiple parties compute a function together—each party learns the *final result*, never the inputs. | Orchestrates secure multiplication and addition across 5 independent nodes. |
+| **SMPC** (Secure Multi-Party Computation) | Multiple parties compute a function together—each party learns the *final result*, never the inputs. | Orchestrates secure multiplication and addition across N independent nodes. |
 | **FHE** (Fully Homomorphic Encryption) | Perform math on *encrypted* data—get the correct answer without ever decrypting the inputs. | Generates the secret pre-computation material (**Beaver Triples**) required for the protocol. |
 
 This demo combines the strengths of both fields to ensure both security and performance:
 
 1.  **The FHE Engine:** Used as the "offline" phase to generate **Beaver Triples** (pre-computed encrypted material).
-2.  **The SMPC Protocol:** Uses those triples in the "online" phase to perform high-speed, secure multiplications across **5 independent parties**.
+2.  **The SMPC Protocol:** Uses those triples in the "online" phase to perform high-speed, secure multiplications across **N independent parties** ([`NUM_PARTIES`](./config.py)).
 
 By separating these concerns, the system maintains the rigorous security of FHE while leveraging the execution speed of SMPC for real-time calculations.
 
@@ -88,7 +88,7 @@ sequenceDiagram
 flowchart LR
     A["Random a"] --> ENC_A["Encrypt(a)"]
     B["Random b"] --> ENC_B["Encrypt(b)"]
-    ENC_A --> MUL["🔒 Homomorphic\nMultiply"]
+    ENC_A --> MUL["🔒 Homomorphic Multiply"]
     ENC_B --> MUL
     MUL --> DEC["Decrypt → c = a·b"]
     DEC --> SHARE["Secret-share\n(a, b, c)"]
@@ -98,28 +98,29 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    CLI["CLI Entry Point\norchestrator.py"] --> SPAWN["Spawn N party nodes"]
-    SPAWN --> N0["Node 0\n:12000"]
-    SPAWN --> N1["Node 1\n:12001"]
-    SPAWN --> N2["Node 2\n:12002"]
-    SPAWN --> N3["Node 3\n:12003"]
-    SPAWN --> N4["Node 4\n:12004"]
+    CLI["CLI Entry Point (orchestrator.py)"] --> SPAWN["Spawn N Party Nodes"]
+    
+    subgraph Nodes [Networked Parties]
+        N0["Node 0 (:12000)"]
+        N1["Node 1 (:12001)"]
+        N2["Node 2 (:12002)"]
+        N3["Node 3 (:12003)"]
+        N4["Node 4 (:12004)"]
+    end
 
-    CLI --> TRIPLE["Generate Beaver\nTriple (plain / FHE)"]
-    │   ├── run_scalar.py                # In-memory scalar add & multiply demo (examples/run_scalar.py)
-    DIST --> N0
-    │   └── run_matrix.py                # In-memory matrix add & multiply demo (examples/run_matrix.py)
-    DIST --> N1
-    DIST --> N2
-    DIST --> N3
-    DIST --> N4
+    SPAWN --> Nodes
 
-    N0 --> RESULT["Collect z-shares\n& Reconstruct"]
-    N1 --> RESULT
-    N2 --> RESULT
-    N3 --> RESULT
-    N4 --> RESULT
-    RESULT --> OUTPUT["Print x × y = z"]
+    CLI --> TRIPLE["Generate Beaver Triples (FHE)"]
+    TRIPLE --> DIST["Distribute Shares"]
+
+    DIST --> N0 & N1 & N2 & N3 & N4
+
+    N0 & N1 & N2 & N3 & N4 --> RESULT["Collect & Reconstruct"]
+    RESULT --> OUTPUT["Final Result (x * y = z)"]
+
+    %% Optional: Linking the Example Scripts
+    EXAMPLES["/examples"] -.-> SCALAR["run_scalar.py"]
+    EXAMPLES -.-> MATRIX["run_matrix.py"]
 ```
 
 ---
@@ -180,7 +181,7 @@ python -m examples.run_matrix
 ### 3. Run the networked demo (TCP party nodes)
 
 ```bash
-# Scalar — spawns 5 nodes, computes 25 × 9 securely
+# Scalar — spawns N nodes, computes 25 × 9 securely
 python -m network.orchestrator --spawn --scalar --x 25 --y 9
 
 # Same, but Beaver triples generated via FHE (BFV)
@@ -190,7 +191,7 @@ python -m network.orchestrator --spawn --scalar --use-fhe --x 25 --y 9
 python -m network.orchestrator --spawn --matrix --use-fhe
 ```
 
-Detailed share-level traces are written to `logs/smpc_orchestrator.log` for scalar operations.
+Detailed share-level traces are also printed for scalar operations.
 
 
 ---
@@ -201,7 +202,7 @@ Suppose two parties want to compute **25 × 9 = 225** without either one knowing
 
 | Step | What happens | Who sees what |
 |------|-------------|---------------|
-| 1 | Each input is **split into 5 random shares** that sum to the input mod *p*. | No single party sees 25 or 9. |
+| 1 | Each input is **split into N random shares** that sum to the input mod *p*. | No single party sees 25 or 9. |
 | 2 | A **Beaver triple** `(a, b, c)` is generated (optionally via FHE) and its shares distributed. | No party sees `a`, `b`, or `c` in the clear. |
 | 3 | Each party computes **masked differences** `dᵢ = xᵢ − aᵢ` and `eᵢ = yᵢ − bᵢ`. | Only masked values are shared. |
 | 4 | All parties **open** `d` and `e`. These are uniformly random — revealing them leaks *nothing*. | `d` and `e` are public but useless alone. |
