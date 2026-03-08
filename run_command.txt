@@ -1,0 +1,20 @@
+# ─── Networked demo (spawns TCP party nodes) ───────────────────────────
+# Scalar multiplication:
+python -m network.orchestrator --spawn --scalar --x 25 --y 9
+
+# Scalar multiplication with FHE-based Beaver triples:
+python -m network.orchestrator --spawn --scalar --use-fhe --x 25 --y 9
+
+# Matrix multiplication:
+python -m network.orchestrator --spawn --matrix
+
+# Matrix multiplication with FHE:
+python -m network.orchestrator --spawn --matrix --use-fhe
+
+# ─── In-memory examples (no networking) ────────────────────────────────
+python -m examples.run_scalar
+python -m examples.run_matrix
+
+# NOTE: Matrix multiplication works reliably up to 3×3.
+#       Larger matrices or large entries may exceed the BFV plaintext
+#       modulus (65 537) constraint.
